@@ -1,0 +1,110 @@
+services:
+
+  web-frontend-server:
+    build: ./web-frontend-server
+    image: phuc2k5bk/myminicloud-web:latest
+    container_name: myminicloud-frontend
+    ports:
+      - "8080:80"
+    networks:
+      - cloud-net
+    restart: unless-stopped
+
+  application-backend-server:
+    build: ./application-backend-server
+    container_name: myminicloud-backend
+    ports:
+      - "8081:8081"
+    depends_on:
+      - relational-database-server
+    networks:
+      - cloud-net
+    restart: unless-stopped
+
+  relational-database-server:
+    image: mariadb
+    container_name: myminicloud-db
+    environment:
+      MYSQL_ROOT_PASSWORD: root
+      MYSQL_DATABASE: mydb
+    ports:
+      - "3306:3306"
+    volumes:
+      - db_data:/var/lib/mysql
+      - ./relational-database-server/init:/docker-entrypoint-initdb.d
+    networks:
+      - cloud-net
+    restart: unless-stopped
+
+  authentication-identity-server:
+    image: quay.io/keycloak/keycloak
+    container_name: myminicloud-keycloak
+    command: start-dev
+    ports:
+      - "8082:8080"
+    environment:
+      KEYCLOAK_ADMIN: admin
+      KEYCLOAK_ADMIN_PASSWORD: admin
+    networks:
+      - cloud-net
+    restart: unless-stopped
+
+  object-storage-server:
+    image: minio/minio
+    container_name: myminicloud-minio
+    command: server /data --console-address ":9001"
+    environment:
+      MINIO_ROOT_USER: minioadmin
+      MINIO_ROOT_PASSWORD: minioadmin
+    ports:
+      - "8083:9000"
+      - "8084:9001"
+    volumes:
+      - ./object-storage-server/data:/data
+    networks:
+      - cloud-net
+    restart: unless-stopped
+
+  monitoring-prometheus-server:
+    image: prom/prometheus
+    container_name: myminicloud-prometheus
+    ports:
+      - "8085:9090"
+    volumes:
+      - ./monitoring-prometheus-server/prometheus.yml:/etc/prometheus/prometheus.yml
+    networks:
+      - cloud-net
+    restart: unless-stopped
+
+  monitoring-grafana-dashboard-server:
+    image: grafana/grafana
+    container_name: myminicloud-grafana
+    ports:
+      - "8086:3000"
+    volumes:
+      - grafana_data:/var/lib/grafana
+    networks:
+      - cloud-net
+    restart: unless-stopped
+
+  api-gateway-proxy-server:
+    image: nginx
+    container_name: myminicloud-gateway
+    ports:
+      - "8087:80"
+    volumes:
+      - ./api-gateway-proxy-server/default.conf:/etc/nginx/conf.d/default.conf
+    depends_on:
+      - application-backend-server
+      - web-frontend-server
+    networks:
+      - cloud-net
+    restart: unless-stopped
+
+networks:
+  cloud-net:
+    driver: bridge
+
+volumes:
+  db_data:
+  grafana_data:
